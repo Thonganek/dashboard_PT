@@ -51,6 +51,10 @@
         .stat-table th { background-color: #047857; color: white; padding: 10px; text-align: left; }
         .stat-table td { padding: 10px; border-bottom: 1px solid #d1fae5; }
         .stat-table tr:hover { background-color: #ecfdf5; }
+
+        /* Swal Custom styles for input */
+        .swal-custom-input { border: 1px solid #d1d5db; border-radius: 0.375rem; padding: 0.375rem 0.75rem; width: 100%; font-size: 0.875rem; }
+        .swal-custom-input:focus { outline: none; border-color: #10b981; box-shadow: 0 0 0 1px #10b981; }
     </style>
 </head>
 <body class="antialiased min-h-screen flex flex-col">
@@ -219,16 +223,25 @@
 
         <!-- Patient Data Table (Requires Login) -->
         <div class="glass-card mb-8">
-            <div class="flex justify-between items-center mb-4">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
                 <h4 class="font-bold text-xl text-brand-900"><i class="fa-solid fa-database mr-2"></i>ฐานข้อมูลผู้ป่วย</h4>
-                <button onclick="showAddModal()" class="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-sm transition hidden auth-required">
-                    <i class="fa-solid fa-plus"></i> เพิ่มข้อมูล
-                </button>
+                <div class="flex flex-col sm:flex-row items-center gap-2 w-full md:w-auto hidden auth-required" id="patientActionGroup">
+                    <!-- ช่องค้นหา (ครอบคลุมรหัส ชื่อ สกุล โรค สถานะขาดนัด) -->
+                    <div class="relative w-full sm:w-64">
+                        <div class="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                            <i class="fa-solid fa-magnifying-glass text-gray-400"></i>
+                        </div>
+                        <input type="text" id="searchPatient" placeholder="ค้นหา รหัส, ชื่อ, ขาดนัด..." class="border border-brand-300 text-sm rounded-lg focus:ring-brand-500 focus:border-brand-500 block w-full pl-10 p-2" onkeyup="renderPatientTable()">
+                    </div>
+                    <button onclick="showAddModal()" class="w-full sm:w-auto bg-brand-600 hover:bg-brand-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm whitespace-nowrap">
+                        <i class="fa-solid fa-plus"></i> เพิ่มข้อมูล
+                    </button>
+                </div>
             </div>
             
             <div id="loginOverlay" class="bg-gray-100 rounded-lg p-8 text-center border-2 border-dashed border-gray-300 mb-4">
                 <i class="fa-solid fa-lock text-4xl text-gray-400 mb-3"></i>
-                <p class="text-gray-600">กรุณาเข้าสู่ระบบเพื่อดู แก้ไข หรือลบข้อมูลรายบุคคล (พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล)</p>
+                <p class="text-gray-600">กรุณาเข้าสู่ระบบเพื่อดู ค้นหา แก้ไข หรือลบข้อมูลรายบุคคล (พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล)</p>
                 <button onclick="showLoginModal()" class="mt-4 bg-amber-500 px-4 py-2 rounded text-brand-900 font-bold hover:bg-amber-400">เข้าสู่ระบบ</button>
             </div>
 
@@ -237,7 +250,7 @@
                     <thead>
                         <tr>
                             <th>จัดการ</th>
-                            <th>รหัส</th><th>ชื่อ</th><th>สกุล</th><th>อายุ</th><th>เพศ</th>
+                            <th>รหัส</th><th>ชื่อ-สกุล</th><th>อายุ</th><th>เพศ</th>
                             <th>โรคหลัก</th><th>สิทธิ์</th><th>BP</th><th>BMI</th><th>สถานะ</th>
                         </tr>
                     </thead>
@@ -247,10 +260,9 @@
         </div>
     </main>
 
-    <!-- App Configuration & Security (Obfuscated) -->
+    <!-- App Configuration & Security -->
     <script>
-        // App Configuration & Security
-        // นำ URL ที่คุณแจ้งมา ฝังลงในระบบโดยตรง
+        // App Configuration
         const _cfg = {
             g: "https://script.google.com/macros/s/AKfycbxrKUWHQxD240KRCr9FzSeeFrNS4vW71054tUk5DmIJUR5oEMwjDb1BKsU6VzVVogWI/exec",
             u: atob("YWRtaW4="), // 'admin'
@@ -268,7 +280,6 @@
             sex: ['#3b82f6', '#ec4899'] // Blue for male, Pink for female
         };
 
-        // Initialize App
         document.addEventListener('DOMContentLoaded', () => {
             fetchFromGoogleSheet();
         });
@@ -279,7 +290,6 @@
         async function fetchFromGoogleSheet() {
             Swal.fire({ title: 'กำลังดึงข้อมูล...', text: 'เชื่อมต่อ Google Sheet', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
-                // Since GET returns JSON usually, but CORS might block if not configured.
                 const response = await fetch(_cfg.g);
                 const data = await response.json();
                 
@@ -293,8 +303,7 @@
             } catch (error) {
                 console.error("Fetch Error:", error);
                 Swal.fire({
-                    icon: 'warning',
-                    title: 'ไม่สามารถดึงจาก Cloud ได้',
+                    icon: 'warning', title: 'ไม่สามารถดึงจาก Cloud ได้',
                     text: 'กรุณาอัปโหลดไฟล์ CSV หรือตรวจสอบสิทธิ์ Google Sheet ของคุณ',
                     confirmButtonColor: '#047857'
                 });
@@ -307,8 +316,7 @@
             Swal.fire({ title: 'กำลังประมวลผลไฟล์...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             
             Papa.parse(file, {
-                header: true,
-                skipEmptyLines: true,
+                header: true, skipEmptyLines: true,
                 complete: function(results) {
                     if (results.data && results.data.length > 0) {
                         globalData = normalizeData(results.data);
@@ -319,7 +327,6 @@
             });
         }
 
-        // Standardize column names in case of slight variations
         function normalizeData(data) {
             return data.map(row => ({
                 id: row['รหัสคนไข้'] || row['ID'] || '',
@@ -352,12 +359,7 @@
         // ==========================================
         function updateDashboard() {
             if(!globalData || globalData.length === 0) return;
-            
-            renderKPIs();
-            renderCharts();
-            renderTables();
-            calculateStatistics();
-            renderPatientTable();
+            renderKPIs(); renderCharts(); renderTables(); calculateStatistics(); renderPatientTable();
         }
 
         function renderKPIs() {
@@ -378,7 +380,6 @@
         // CHARTING LOGIC
         // ==========================================
         function renderCharts() {
-            // Helper: Binning
             const binData = (key, bins, labels) => {
                 let counts = new Array(labels.length).fill(0);
                 globalData.forEach(p => {
@@ -391,40 +392,31 @@
                 return counts;
             };
 
-            // Helper: Grouping Categories
             const groupData = (key) => {
                 let counts = {};
                 globalData.forEach(p => { let v = p[key]; counts[v] = (counts[v] || 0) + 1; });
                 return counts;
             };
 
-            // 1. Age (Bar)
-            const ageBins = [30, 45, 60, 150];
-            const ageLabels = ['<30', '30-45', '46-60', '>60'];
+            const ageBins = [30, 45, 60, 150]; const ageLabels = ['<30', '30-45', '46-60', '>60'];
             createChart('chartAge', 'bar', ageLabels, binData('age', ageBins, ageLabels), colors.green);
 
-            // 2. Sex (Pie)
             let sexData = groupData('sex');
             createChart('chartSex', 'pie', Object.keys(sexData), Object.values(sexData), colors.sex);
 
-            // 3. Follow Up (Pie)
             let statusData = groupData('status');
             createChart('chartFollowUp', 'pie', Object.keys(statusData), Object.values(statusData), colors.pie);
 
-            // 4. Diagnosis (Horizontal Bar)
             let diagData = groupData('diagnosis');
-            // Sort to show top 5
             let sortedDiag = Object.entries(diagData).sort((a,b)=>b[1]-a[1]).slice(0, 6);
             createChart('chartDiag', 'bar', sortedDiag.map(x=>x[0]), sortedDiag.map(x=>x[1]), colors.green, true);
 
-            // 5. Rights (Bar)
             let rightData = groupData('rights');
             createChart('chartRights', 'bar', Object.keys(rightData), Object.values(rightData), colors.green);
 
-            // Clinical Vitals (Bars)
             createChart('chartSBP', 'bar', ['<120','120-139','140-159','>=160'], binData('sbp', [119,139,159,999], [0,0,0,0]), colors.green);
             createChart('chartDBP', 'bar', ['<80','80-89','90-99','>=100'], binData('dbp', [79,89,99,999], [0,0,0,0]), colors.green);
-            createChart('chartBMI', 'bar', ['<18.5','18.5-22.9','23-24.9','>=25 (อ้วน)'], binData('bmi', [18.4, 22.9, 24.9, 999], [0,0,0,0]), colors.green);
+            createChart('chartBMI', 'bar', ['<18.5','18.5-22.9','23-24.9','>=25'], binData('bmi', [18.4, 22.9, 24.9, 999], [0,0,0,0]), colors.green);
             createChart('chartFBS', 'bar', ['<100','100-125','>=126'], binData('fbs', [99, 125, 999], [0,0,0]), colors.green);
             createChart('chartHbA1c', 'bar', ['<5.7','5.7-6.4','>=6.5'], binData('hba1c', [5.6, 6.4, 99], [0,0,0]), colors.green);
             createChart('chartEGFR', 'bar', ['>=90(G1)','60-89(G2)','30-59(G3)','15-29(G4)','<15(G5)'], [
@@ -433,7 +425,6 @@
                 globalData.filter(p=>p.egfr<15).length
             ], colors.green);
             
-            // Weight & Height
             createChart('chartWt', 'bar', ['<50','50-65','66-80','>80'], binData('weight', [49,65,80,999], [0,0,0,0]), colors.green);
             createChart('chartHt', 'bar', ['<150','150-160','161-170','>170'], binData('height', [149,160,170,999], [0,0,0,0]), colors.green);
         }
@@ -442,27 +433,10 @@
             let ctx = document.getElementById(canvasId).getContext('2d');
             if(chartInstances[canvasId]) chartInstances[canvasId].destroy();
 
-            let opts = {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: type==='pie' } }
-            };
-
+            let opts = { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: type==='pie' } } };
             if (isHorizontal) opts.indexAxis = 'y';
 
-            chartInstances[canvasId] = new Chart(ctx, {
-                type: type,
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        label: 'จำนวน',
-                        data: data,
-                        backgroundColor: bgColors,
-                        borderWidth: 1
-                    }]
-                },
-                options: opts
-            });
+            chartInstances[canvasId] = new Chart(ctx, { type: type, data: { labels: labels, datasets: [{ label: 'จำนวน', data: data, backgroundColor: bgColors, borderWidth: 1 }] }, options: opts });
         }
 
         // ==========================================
@@ -470,92 +444,41 @@
         // ==========================================
         function calculateStatistics() {
             try {
-                // 1. Chi-Square: Sex vs Smoking & Alcohol
-                let chiHtml = '';
-                chiHtml += doChiSquare('สูบบุหรี่', 'smoking');
-                chiHtml += doChiSquare('ดื่มแอลกอฮอล์', 'alcohol');
+                let chiHtml = doChiSquare('สูบบุหรี่', 'smoking') + doChiSquare('ดื่มแอลกอฮอล์', 'alcohol');
                 document.getElementById('chiSquareBody').innerHTML = chiHtml;
 
-                // 2. T-Test: Sex vs HbA1c, FBS, eGFR, BMI
-                let tHtml = '';
-                tHtml += doTTest('HbA1c', 'hba1c');
-                tHtml += doTTest('FBS', 'fbs');
-                tHtml += doTTest('eGFR', 'egfr');
-                tHtml += doTTest('BMI', 'bmi');
+                let tHtml = doTTest('HbA1c', 'hba1c') + doTTest('FBS', 'fbs') + doTTest('eGFR', 'egfr') + doTTest('BMI', 'bmi');
                 document.getElementById('tTestBody').innerHTML = tHtml;
             } catch (e) {
-                console.error("Stats Error:", e);
                 document.getElementById('chiSquareBody').innerHTML = '<tr><td colspan="4" class="text-center text-red-500">ไม่สามารถคำนวณสถิติได้เนื่องจากข้อมูลไม่สมบูรณ์</td></tr>';
             }
         }
 
         function doChiSquare(label, key) {
-            let males = globalData.filter(p => p.sex === 'ชาย');
-            let females = globalData.filter(p => p.sex === 'หญิง');
-            
-            // Collect unique categories for the key
+            let males = globalData.filter(p => p.sex === 'ชาย'); let females = globalData.filter(p => p.sex === 'หญิง');
             let cats = [...new Set(globalData.map(p => p[key]).filter(x=>x))];
-            
-            // Build observed matrix [ [m_cat1, m_cat2], [f_cat1, f_cat2] ]
-            let observed = [
-                cats.map(c => males.filter(p => p[key] === c).length),
-                cats.map(c => females.filter(p => p[key] === c).length)
-            ];
-
-            // Basic Chi-Square calculation
-            let rowTotals = observed.map(row => row.reduce((a,b)=>a+b,0));
-            let colTotals = cats.map((_, i) => observed[0][i] + observed[1][i]);
-            let grandTotal = rowTotals.reduce((a,b)=>a+b,0);
+            let observed = [ cats.map(c => males.filter(p => p[key] === c).length), cats.map(c => females.filter(p => p[key] === c).length) ];
+            let rowTotals = observed.map(row => row.reduce((a,b)=>a+b,0)); let colTotals = cats.map((_, i) => observed[0][i] + observed[1][i]); let grandTotal = rowTotals.reduce((a,b)=>a+b,0);
 
             let chiSq = 0;
-            for(let r=0; r<2; r++){
-                for(let c=0; c<cats.length; c++){
-                    let exp = (rowTotals[r] * colTotals[c]) / grandTotal;
-                    if(exp > 0) chiSq += Math.pow(observed[r][c] - exp, 2) / exp;
-                }
-            }
-
-            let df = (2-1) * (cats.length-1);
-            // using jStat to find p-value
-            let pVal = 1 - jStat.chisquare.cdf(chiSq, df);
+            for(let r=0; r<2; r++){ for(let c=0; c<cats.length; c++){ let exp = (rowTotals[r] * colTotals[c]) / grandTotal; if(exp > 0) chiSq += Math.pow(observed[r][c] - exp, 2) / exp; } }
+            let df = (2-1) * (cats.length-1); let pVal = 1 - jStat.chisquare.cdf(chiSq, df);
             let sig = pVal < 0.05 ? '<span class="text-red-600 font-bold">มีนัยสำคัญ</span>' : 'ไม่มีนัยสำคัญ';
-
             return `<tr><td>${label}</td><td>${chiSq.toFixed(3)}</td><td>${pVal.toFixed(4)}</td><td>${sig}</td></tr>`;
         }
 
         function doTTest(label, key) {
             let mData = globalData.filter(p => p.sex === 'ชาย').map(p => parseFloat(p[key])).filter(v => !isNaN(v));
             let fData = globalData.filter(p => p.sex === 'หญิง').map(p => parseFloat(p[key])).filter(v => !isNaN(v));
-
             if(mData.length < 2 || fData.length < 2) return '';
 
-            let meanM = jStat.mean(mData);
-            let meanF = jStat.mean(fData);
-            let varM = jStat.variance(mData, true);
-            let varF = jStat.variance(fData, true);
-            let nM = mData.length;
-            let nF = fData.length;
-
-            // Welch's t-test
-            let se = Math.sqrt((varM/nM) + (varF/nF));
-            let t = (meanM - meanF) / se;
+            let meanM = jStat.mean(mData); let meanF = jStat.mean(fData); let varM = jStat.variance(mData, true); let varF = jStat.variance(fData, true); let nM = mData.length; let nF = fData.length;
+            let se = Math.sqrt((varM/nM) + (varF/nF)); let t = (meanM - meanF) / se;
             let df = Math.pow((varM/nM + varF/nF), 2) / ( Math.pow(varM/nM, 2)/(nM-1) + Math.pow(varF/nF, 2)/(nF-1) );
-            
             let pVal = jStat.studentt.cdf(-Math.abs(t), df) * 2;
-            
-            // 95% CI of difference
-            let tCrit = jStat.studentt.inv(0.975, df);
-            let diff = meanM - meanF;
-            let ciLow = diff - (tCrit * se);
-            let ciHigh = diff + (tCrit * se);
+            let tCrit = jStat.studentt.inv(0.975, df); let diff = meanM - meanF; let ciLow = diff - (tCrit * se); let ciHigh = diff + (tCrit * se);
 
-            return `<tr>
-                <td>${label}</td>
-                <td>${meanM.toFixed(2)}</td>
-                <td>${meanF.toFixed(2)}</td>
-                <td class="${pVal < 0.05 ? 'text-red-600 font-bold' : ''}">${pVal.toFixed(4)}</td>
-                <td>${ciLow.toFixed(2)} ถึง ${ciHigh.toFixed(2)}</td>
-            </tr>`;
+            return `<tr><td>${label}</td><td>${meanM.toFixed(2)}</td><td>${meanF.toFixed(2)}</td><td class="${pVal < 0.05 ? 'text-red-600 font-bold' : ''}">${pVal.toFixed(4)}</td><td>${ciLow.toFixed(2)} ถึง ${ciHigh.toFixed(2)}</td></tr>`;
         }
 
         // ==========================================
@@ -567,59 +490,27 @@
         }
 
         function renderAddressTable() {
-            let filter = document.getElementById('filterAddress').value.toLowerCase();
-            let addrMap = {};
-            globalData.forEach(p => {
-                let addr = `${p.subdistrict} / ${p.village}`;
-                if(addr.toLowerCase().includes(filter)) {
-                    addrMap[addr] = (addrMap[addr] || 0) + 1;
-                }
-            });
-
-            let html = Object.entries(addrMap).sort((a,b)=>b[1]-a[1]).map(x => {
-                let parts = x[0].split(' / ');
-                return `<tr><td>${parts[0]}</td><td>${parts[1]}</td><td>${x[1]}</td></tr>`;
-            }).join('');
-            document.getElementById('addressTableBody').innerHTML = html;
+            let filter = document.getElementById('filterAddress').value.toLowerCase(); let addrMap = {};
+            globalData.forEach(p => { let addr = `${p.subdistrict} / ${p.village}`; if(addr.toLowerCase().includes(filter)) addrMap[addr] = (addrMap[addr] || 0) + 1; });
+            document.getElementById('addressTableBody').innerHTML = Object.entries(addrMap).sort((a,b)=>b[1]-a[1]).map(x => { let parts = x[0].split(' / '); return `<tr><td>${parts[0]}</td><td>${parts[1]}</td><td>${x[1]}</td></tr>`; }).join('');
         }
 
         function renderMedsTable() {
-            let filter = document.getElementById('filterMeds').value.toLowerCase();
-            let medsMap = {};
-            globalData.forEach(p => {
-                if(!p.meds) return;
-                // Assume meds might be comma separated
-                let mList = p.meds.split(',').map(m=>m.trim());
-                mList.forEach(m => {
-                    if(m.toLowerCase().includes(filter)) medsMap[m] = (medsMap[m] || 0) + 1;
-                });
-            });
-
-            let html = Object.entries(medsMap).sort((a,b)=>b[1]-a[1]).map(x => {
-                return `<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`;
-            }).join('');
-            document.getElementById('medsTableBody').innerHTML = html;
+            let filter = document.getElementById('filterMeds').value.toLowerCase(); let medsMap = {};
+            globalData.forEach(p => { if(!p.meds) return; let mList = p.meds.split(',').map(m=>m.trim()); mList.forEach(m => { if(m.toLowerCase().includes(filter)) medsMap[m] = (medsMap[m] || 0) + 1; }); });
+            document.getElementById('medsTableBody').innerHTML = Object.entries(medsMap).sort((a,b)=>b[1]-a[1]).map(x => `<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join('');
         }
 
         // ==========================================
-        // AUTHENTICATION & PATIENT TABLE
+        // AUTHENTICATION & PATIENT TABLE WITH SEARCH
         // ==========================================
         function showLoginModal() {
             Swal.fire({
                 title: 'เข้าสู่ระบบ (เจ้าหน้าที่)',
-                html: `
-                    <input type="text" id="swal-user" class="swal2-input" placeholder="Username">
-                    <input type="password" id="swal-pass" class="swal2-input" placeholder="Password">
-                `,
-                confirmButtonText: 'เข้าสู่ระบบ',
-                confirmButtonColor: '#047857',
-                focusConfirm: false,
+                html: `<input type="text" id="swal-user" class="swal2-input" placeholder="Username"><input type="password" id="swal-pass" class="swal2-input" placeholder="Password">`,
+                confirmButtonText: 'เข้าสู่ระบบ', confirmButtonColor: '#047857', focusConfirm: false,
                 preConfirm: () => {
-                    const u = document.getElementById('swal-user').value;
-                    const p = document.getElementById('swal-pass').value;
-                    if (u === _cfg.u && p === _cfg.p) {
-                        return true;
-                    }
+                    if (document.getElementById('swal-user').value === _cfg.u && document.getElementById('swal-pass').value === _cfg.p) return true;
                     Swal.showValidationMessage(`ข้อมูลผู้ใช้ไม่ถูกต้อง`);
                 }
             }).then((result) => {
@@ -627,6 +518,7 @@
                     isLoggedIn = true;
                     document.getElementById('loginOverlay').classList.add('hidden');
                     document.querySelectorAll('.auth-required').forEach(el => el.classList.remove('hidden'));
+                    document.getElementById('patientActionGroup').classList.replace('hidden', 'flex'); // Show search bar & Add button
                     document.getElementById('loginBtn').innerHTML = `<i class="fa-solid fa-user-check"></i> เจ้าหน้าที่`;
                     document.getElementById('loginBtn').classList.replace('bg-amber-500', 'bg-brand-500');
                     document.getElementById('loginBtn').classList.replace('text-brand-950', 'text-white');
@@ -638,71 +530,162 @@
 
         function renderPatientTable() {
             if(!isLoggedIn) return;
-            let html = globalData.map((p, index) => `
+            
+            // Search / Filter Logic
+            let filterStr = document.getElementById('searchPatient').value.toLowerCase();
+            let displayData = globalData;
+
+            if (filterStr) {
+                displayData = globalData.filter(p => 
+                    (p.id && p.id.toLowerCase().includes(filterStr)) ||
+                    (p.name && p.name.toLowerCase().includes(filterStr)) ||
+                    (p.surname && p.surname.toLowerCase().includes(filterStr)) ||
+                    (p.diagnosis && p.diagnosis.toLowerCase().includes(filterStr)) ||
+                    (p.status && p.status.toLowerCase().includes(filterStr))
+                );
+            }
+
+            let html = displayData.map(p => {
+                // Find original index to pass to edit/delete functions correctly
+                let originalIndex = globalData.findIndex(g => g.id === p.id);
+                
+                let statusColor = p.status === 'รักษาครบ' ? 'bg-green-100 text-green-800' : (p.status.includes('ขาดนัด') ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800');
+                
+                return `
                 <tr>
                     <td>
-                        <button onclick="editPatient(${index})" class="text-blue-500 hover:text-blue-700 mr-2" title="แก้ไข"><i class="fa-solid fa-pen-to-square"></i></button>
-                        <button onclick="deletePatient(${index})" class="text-red-500 hover:text-red-700" title="ลบ"><i class="fa-solid fa-trash"></i></button>
+                        <button onclick="editPatient(${originalIndex})" class="text-blue-500 hover:text-blue-700 mr-2" title="แก้ไข"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button onclick="deletePatient(${originalIndex})" class="text-red-500 hover:text-red-700" title="ลบ"><i class="fa-solid fa-trash"></i></button>
                     </td>
                     <td class="font-mono">${p.id}</td>
-                    <td>${p.name}</td>
-                    <td>${p.surname}</td>
+                    <td>${p.name} ${p.surname}</td>
                     <td>${p.age}</td>
                     <td>${p.sex}</td>
                     <td>${p.diagnosis}</td>
                     <td>${p.rights}</td>
                     <td>${p.sbp}/${p.dbp}</td>
                     <td>${p.bmi}</td>
-                    <td><span class="px-2 py-1 rounded text-xs ${p.status==='รักษาครบ'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}">${p.status}</span></td>
+                    <td><span class="px-2 py-1 rounded text-xs ${statusColor}">${p.status}</span></td>
                 </tr>
-            `).join('');
+            `}).join('');
+            
+            if (displayData.length === 0) {
+                html = `<tr><td colspan="10" class="text-center py-4 text-gray-500">ไม่พบข้อมูลที่ค้นหา</td></tr>`;
+            }
+
             document.getElementById('patientTableBody').innerHTML = html;
         }
 
         // ==========================================
-        // CRUD OPERATIONS (Google Sheet Sync)
+        // CRUD OPERATIONS (Full 22 Columns)
         // ==========================================
-        function showAddModal() {
-            showPatientFormModal({}, 'add', -1);
-        }
-
-        function editPatient(index) {
-            showPatientFormModal(globalData[index], 'edit', index);
-        }
+        function showAddModal() { showPatientFormModal({}, 'add', -1); }
+        function editPatient(index) { showPatientFormModal(globalData[index], 'edit', index); }
 
         function showPatientFormModal(data, action, index) {
             Swal.fire({
-                title: action === 'add' ? 'เพิ่มข้อมูลผู้ป่วย' : 'แก้ไขข้อมูล',
+                title: action === 'add' ? 'เพิ่มข้อมูลผู้ป่วย' : 'แก้ไขข้อมูลผู้ป่วย',
+                width: '900px', // ทำให้กว้างขึ้นรองรับ Grid 3 คอลัมน์
                 html: `
-                    <div class="grid grid-cols-2 gap-2 text-left text-sm">
-                        <input id="f_id" class="swal2-input m-1 h-10" placeholder="รหัส" value="${data.id||''}" ${action==='edit'?'readonly':''}>
-                        <input id="f_name" class="swal2-input m-1 h-10" placeholder="ชื่อ" value="${data.name||''}">
-                        <input id="f_sur" class="swal2-input m-1 h-10" placeholder="สกุล" value="${data.surname||''}">
-                        <input id="f_age" type="number" class="swal2-input m-1 h-10" placeholder="อายุ" value="${data.age||''}">
-                        <select id="f_sex" class="swal2-input m-1 h-10"><option ${data.sex==='ชาย'?'selected':''}>ชาย</option><option ${data.sex==='หญิง'?'selected':''}>หญิง</option></select>
-                        <input id="f_diag" class="swal2-input m-1 h-10" placeholder="โรคหลัก" value="${data.diagnosis||''}">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-left text-sm max-h-[60vh] overflow-y-auto p-1 pr-3">
+                        
+                        <!-- ข้อมูลส่วนตัว -->
+                        <div class="col-span-1 md:col-span-3 font-bold text-brand-700 border-b pb-1 mt-2"><i class="fa-solid fa-user mr-2"></i>ข้อมูลส่วนตัว</div>
+                        <div><label class="block text-xs text-gray-500 mb-1">รหัสคนไข้</label><input id="f_id" class="swal-custom-input bg-gray-50" placeholder="เช่น P00001" value="${data.id||''}" ${action==='edit'?'readonly':''}></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ชื่อ</label><input id="f_name" class="swal-custom-input" value="${data.name||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">สกุล</label><input id="f_sur" class="swal-custom-input" value="${data.surname||''}"></div>
+                        
+                        <div><label class="block text-xs text-gray-500 mb-1">อายุ (ปี)</label><input id="f_age" type="number" class="swal-custom-input" value="${data.age||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">เพศ</label><select id="f_sex" class="swal-custom-input"><option ${data.sex==='ชาย'?'selected':''}>ชาย</option><option ${data.sex==='หญิง'?'selected':''}>หญิง</option></select></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ประเภทสิทธิ์</label><input id="f_rights" class="swal-custom-input" placeholder="เช่น บัตรทอง" value="${data.rights||''}"></div>
+                        
+                        <!-- ที่อยู่ & การรักษา -->
+                        <div class="col-span-1 md:col-span-3 font-bold text-brand-700 border-b pb-1 mt-2"><i class="fa-solid fa-house-medical mr-2"></i>ที่อยู่และการรักษา</div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ตำบล</label><input id="f_sub" class="swal-custom-input" value="${data.subdistrict||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">หมู่บ้าน</label><input id="f_vil" class="swal-custom-input" value="${data.village||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">การวินิจฉัยหลัก</label><input id="f_diag" class="swal-custom-input" value="${data.diagnosis||''}"></div>
+                        
+                        <!-- ข้อมูลทางคลินิก -->
+                        <div class="col-span-1 md:col-span-3 font-bold text-brand-700 border-b pb-1 mt-2"><i class="fa-solid fa-stethoscope mr-2"></i>ข้อมูลทางคลินิก (Vitals & Labs)</div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ความดันบน (SBP)</label><input id="f_sbp" type="number" class="swal-custom-input" value="${data.sbp||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ความดันล่าง (DBP)</label><input id="f_dbp" type="number" class="swal-custom-input" value="${data.dbp||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">น้ำหนัก (กก.)</label><input id="f_wt" type="number" step="0.1" class="swal-custom-input" value="${data.weight||''}"></div>
+                        
+                        <div><label class="block text-xs text-gray-500 mb-1">ส่วนสูง (ซม.)</label><input id="f_ht" type="number" step="0.1" class="swal-custom-input" value="${data.height||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">BMI</label><input id="f_bmi" type="number" step="0.1" class="swal-custom-input" value="${data.bmi||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">FBS</label><input id="f_fbs" type="number" step="0.1" class="swal-custom-input" value="${data.fbs||''}"></div>
+                        
+                        <div><label class="block text-xs text-gray-500 mb-1">HbA1c</label><input id="f_hba1c" type="number" step="0.1" class="swal-custom-input" value="${data.hba1c||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">eGFR</label><input id="f_egfr" type="number" step="0.1" class="swal-custom-input" value="${data.egfr||''}"></div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ยาที่ได้รับ</label><input id="f_meds" class="swal-custom-input" placeholder="คั่นด้วยลูกน้ำ (,)" value="${data.meds||''}"></div>
+                        
+                        <!-- พฤติกรรมและการติดตาม -->
+                        <div class="col-span-1 md:col-span-3 font-bold text-brand-700 border-b pb-1 mt-2"><i class="fa-solid fa-clipboard-user mr-2"></i>พฤติกรรม & การติดตาม</div>
+                        <div><label class="block text-xs text-gray-500 mb-1">สูบบุหรี่</label>
+                            <select id="f_smoke" class="swal-custom-input">
+                                <option value="">ไม่ระบุ</option>
+                                <option ${data.smoking==='ไม่เคยสูบ'?'selected':''}>ไม่เคยสูบ</option>
+                                <option ${data.smoking==='เลิกแล้ว'?'selected':''}>เลิกแล้ว</option>
+                                <option ${data.smoking==='สูบบางครั้ง'?'selected':''}>สูบบางครั้ง</option>
+                                <option ${data.smoking==='สูบประจำ'?'selected':''}>สูบประจำ</option>
+                            </select>
+                        </div>
+                        <div><label class="block text-xs text-gray-500 mb-1">ดื่มแอลกอฮอล์</label>
+                            <select id="f_alc" class="swal-custom-input">
+                                <option value="">ไม่ระบุ</option>
+                                <option ${data.alcohol==='ไม่เคยดื่ม'?'selected':''}>ไม่เคยดื่ม</option>
+                                <option ${data.alcohol==='เลิกแล้ว'?'selected':''}>เลิกแล้ว</option>
+                                <option ${data.alcohol==='ดื่มบางครั้ง'?'selected':''}>ดื่มบางครั้ง</option>
+                                <option ${data.alcohol==='ดื่มประจำ'?'selected':''}>ดื่มประจำ</option>
+                            </select>
+                        </div>
+                        
+                        <div><label class="block text-xs text-gray-500 mb-1">สถานะติดตาม</label>
+                            <select id="f_status" class="swal-custom-input">
+                                <option ${data.status==='ยังติดตาม'?'selected':''}>ยังติดตาม</option>
+                                <option ${data.status==='รักษาครบ'?'selected':''}>รักษาครบ</option>
+                                <option ${data.status==='ขาดนัด'?'selected':''}>ขาดนัด</option>
+                                <option ${data.status==='เสียชีวิต'?'selected':''}>เสียชีวิต</option>
+                                <option ${data.status==='ส่งต่อ'?'selected':''}>ส่งต่อ</option>
+                            </select>
+                        </div>
+                        <div><label class="block text-xs text-gray-500 mb-1">วันที่รับบริการล่าสุด</label><input id="f_date" class="swal-custom-input" placeholder="DD/MM/YYYY" value="${data.date||''}"></div>
                     </div>
                 `,
-                showCancelButton: true,
-                confirmButtonText: 'บันทึก',
-                cancelButtonText: 'ยกเลิก',
-                confirmButtonColor: '#047857',
+                showCancelButton: true, confirmButtonText: '<i class="fa-solid fa-save mr-1"></i> บันทึก', cancelButtonText: 'ยกเลิก', confirmButtonColor: '#047857',
                 preConfirm: () => {
+                    const idVal = document.getElementById('f_id').value.trim();
+                    if (!idVal) { Swal.showValidationMessage('กรุณาระบุ รหัสคนไข้'); return false; }
+                    
                     return {
-                        id: document.getElementById('f_id').value,
+                        id: idVal,
                         name: document.getElementById('f_name').value,
                         surname: document.getElementById('f_sur').value,
-                        age: parseFloat(document.getElementById('f_age').value),
+                        age: parseFloat(document.getElementById('f_age').value) || 0,
                         sex: document.getElementById('f_sex').value,
+                        subdistrict: document.getElementById('f_sub').value,
+                        village: document.getElementById('f_vil').value,
+                        rights: document.getElementById('f_rights').value,
                         diagnosis: document.getElementById('f_diag').value,
-                        // Defaults for required chart fields to prevent breaks
-                        sbp: data.sbp || 120, dbp: data.dbp || 80, bmi: data.bmi || 22, rights: data.rights || 'ปกติ', status: data.status || 'ติดตาม'
+                        sbp: parseFloat(document.getElementById('f_sbp').value) || 0,
+                        dbp: parseFloat(document.getElementById('f_dbp').value) || 0,
+                        weight: parseFloat(document.getElementById('f_wt').value) || 0,
+                        height: parseFloat(document.getElementById('f_ht').value) || 0,
+                        bmi: parseFloat(document.getElementById('f_bmi').value) || 0,
+                        fbs: parseFloat(document.getElementById('f_fbs').value) || 0,
+                        hba1c: parseFloat(document.getElementById('f_hba1c').value) || 0,
+                        egfr: parseFloat(document.getElementById('f_egfr').value) || 0,
+                        smoking: document.getElementById('f_smoke').value,
+                        alcohol: document.getElementById('f_alc').value,
+                        meds: document.getElementById('f_meds').value,
+                        status: document.getElementById('f_status').value,
+                        date: document.getElementById('f_date').value
                     }
                 }
             }).then((result) => {
                 if(result.isConfirmed) {
                     let newData = {...data, ...result.value};
-                    if(action === 'add') globalData.unshift(newData);
+                    if(action === 'add') globalData.unshift(newData); // เพิ่มด้านบนสุด
                     else globalData[index] = newData;
                     
                     updateDashboard();
@@ -714,11 +697,8 @@
         function deletePatient(index) {
             Swal.fire({
                 title: 'ยืนยันการลบ?',
-                text: `คุณต้องการลบผู้ป่วย ${globalData[index].id} ใช่หรือไม่?`,
-                icon: 'warning',
-                showCancelButton: true,
-                confirmButtonColor: '#ef4444',
-                confirmButtonText: 'ใช่, ลบเลย'
+                text: `คุณต้องการลบผู้ป่วย รหัส ${globalData[index].id} ใช่หรือไม่?`,
+                icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'ใช่, ลบเลย'
             }).then((result) => {
                 if (result.isConfirmed) {
                     let deletedId = globalData[index].id;
@@ -729,26 +709,19 @@
             });
         }
 
-        // Post to Google Apps Script
         function syncWithGoogleSheet(payload) {
-            // Provide visual feedback
             const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
             
-            // Standard fetch call for GAS doPost. 
-            // Note: GAS must handle standard POST or CORS. If CORS fails, local state is still updated.
             fetch(_cfg.g, {
                 method: 'POST',
-                // using text/plain prevents CORS preflight issues on some GAS setups
                 headers: { 'Content-Type': 'text/plain;charset=utf-8' },
                 body: JSON.stringify(payload)
             }).then(res => res.json())
               .then(data => {
-                  if(data.status === 'success') {
-                      Toast.fire({ icon: 'success', title: 'ซิงค์ข้อมูลไปยัง Cloud แล้ว' });
-                  }
+                  if(data.status === 'success') { Toast.fire({ icon: 'success', title: 'ซิงค์ข้อมูลไปยัง Cloud แล้ว' }); }
               }).catch(err => {
-                  console.warn("GAS Sync warning (Normal if CORS restricted):", err);
-                  Toast.fire({ icon: 'info', title: 'อัปเดตข้อมูลในระบบแล้ว (Offline Mode)' });
+                  console.warn("GAS Sync info:", err);
+                  Toast.fire({ icon: 'info', title: 'อัปเดตข้อมูลในระบบแล้ว' });
               });
         }
 
