@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบรายงานสถิติผู้ป่วยวิจัย (Patient Research Dashboard)</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#ecfdf5', 100: '#d1fae5', 500: '#10b981', 700: '#047857', 900: '#064e3b', 950: '#022c22' }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- PapaParse for CSV Upload -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    
+    <!-- jStat for Statistical Analysis -->
+    <script src="https://cdn.jsdelivr.net/npm/jstat@latest/dist/jstat.min.js"></script>
+    
+    <!-- SweetAlert2 for Modals/Alerts -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Sarabun', sans-serif; background-color: #f0fdf4; color: #064e3b; }
+        .glass-card { background: white; border-radius: 1rem; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); border-top: 4px solid #047857; padding: 1.5rem; transition: transform 0.2s; }
+        .glass-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .chart-container-sm { position: relative; height: 250px; width: 100%; }
+        .chart-container-md { position: relative; height: 300px; width: 100%; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #d1fae5; }
+        ::-webkit-scrollbar-thumb { background: #047857; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #064e3b; }
+        
+        .stat-table th { background-color: #047857; color: white; padding: 10px; text-align: left; }
+        .stat-table td { padding: 10px; border-bottom: 1px solid #d1fae5; }
+        .stat-table tr:hover { background-color: #ecfdf5; }
+    </style>
+</head>
+<body class="antialiased min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav class="bg-brand-900 text-white shadow-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-3">
+                    <i class="fa-solid fa-hospital-user text-2xl text-brand-500"></i>
+                    <span class="font-bold text-xl tracking-wide">Patient Research Analytics</span>
+                </div>
+                <div class="flex items-center gap-4">
+                    <button onclick="document.getElementById('fileInput').click()" class="bg-brand-700 hover:bg-brand-500 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <i class="fa-solid fa-file-csv"></i> อัปโหลด CSV
+                    </button>
+                    <input type="file" id="fileInput" accept=".csv" class="hidden" onchange="handleFileUpload(event)">
+                    <button onclick="fetchFromGoogleSheet()" class="bg-blue-600 hover:bg-blue-500 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+                        <i class="fa-solid fa-cloud-arrow-down"></i> ดึงข้อมูลจาก Cloud
+                    </button>
+                    <button id="loginBtn" onclick="showLoginModal()" class="bg-amber-500 hover:bg-amber-400 text-brand-950 px-4 py-2 rounded-lg text-sm font-bold transition flex items-center gap-2">
+                        <i class="fa-solid fa-lock"></i> จนท.เข้าสู่ระบบ
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-grow p-4 sm:p-6 lg:p-8 max-w-[1600px] mx-auto w-full">
+        
+        <!-- KPI Row -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gradient-to-br from-brand-700 to-brand-900 rounded-xl p-6 text-white shadow-lg">
+                <p class="text-brand-100 text-sm font-medium">จำนวนผู้ป่วยทั้งหมด</p>
+                <h3 class="text-4xl font-bold mt-2" id="kpiTotal">-</h3>
+            </div>
+            <div class="bg-gradient-to-br from-teal-600 to-teal-800 rounded-xl p-6 text-white shadow-lg">
+                <p class="text-teal-100 text-sm font-medium">อายุเฉลี่ย (ปี)</p>
+                <h3 class="text-4xl font-bold mt-2" id="kpiAvgAge">-</h3>
+            </div>
+            <div class="bg-gradient-to-br from-emerald-500 to-emerald-700 rounded-xl p-6 text-white shadow-lg">
+                <p class="text-emerald-100 text-sm font-medium">ชาย : หญิง</p>
+                <h3 class="text-3xl font-bold mt-2" id="kpiSexRatio">-</h3>
+            </div>
+            <div class="bg-gradient-to-br from-cyan-600 to-cyan-800 rounded-xl p-6 text-white shadow-lg">
+                <p class="text-cyan-100 text-sm font-medium">สถานะยังติดตาม (%)</p>
+                <h3 class="text-4xl font-bold mt-2" id="kpiFollowUp">-</h3>
+            </div>
+        </div>
+
+        <!-- Charts Grid 1 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card">
+                <h4 class="font-bold text-lg mb-4 text-brand-900 border-b pb-2"><i class="fa-solid fa-users mr-2"></i>ช่วงอายุ (Age Groups)</h4>
+                <div class="chart-container-sm"><canvas id="chartAge"></canvas></div>
+            </div>
+            <div class="glass-card flex flex-col items-center">
+                <h4 class="font-bold text-lg mb-4 text-brand-900 border-b pb-2 w-full text-left"><i class="fa-solid fa-venus-mars mr-2"></i>สัดส่วนเพศ (Sex)</h4>
+                <div class="chart-container-sm" style="width: 80%;"><canvas id="chartSex"></canvas></div>
+            </div>
+            <div class="glass-card flex flex-col items-center">
+                <h4 class="font-bold text-lg mb-4 text-brand-900 border-b pb-2 w-full text-left"><i class="fa-solid fa-calendar-check mr-2"></i>สถานะติดตาม (Follow-up)</h4>
+                <div class="chart-container-sm" style="width: 80%;"><canvas id="chartFollowUp"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Charts Grid 2 -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div class="glass-card">
+                <h4 class="font-bold text-lg mb-4 text-brand-900 border-b pb-2"><i class="fa-solid fa-notes-medical mr-2"></i>การวินิจฉัยหลัก (Main Diagnosis)</h4>
+                <div class="chart-container-md"><canvas id="chartDiag"></canvas></div>
+            </div>
+            <div class="glass-card">
+                <h4 class="font-bold text-lg mb-4 text-brand-900 border-b pb-2"><i class="fa-solid fa-id-card mr-2"></i>ประเภทสิทธิ์ (Rights)</h4>
+                <div class="chart-container-md"><canvas id="chartRights"></canvas></div>
+            </div>
+        </div>
+
+        <!-- Clinical Data Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            <div class="glass-card"><h4 class="font-bold mb-2">ความดันบน (SBP)</h4><div class="chart-container-sm"><canvas id="chartSBP"></canvas></div></div>
+            <div class="glass-card"><h4 class="font-bold mb-2">ความดันล่าง (DBP)</h4><div class="chart-container-sm"><canvas id="chartDBP"></canvas></div></div>
+            <div class="glass-card"><h4 class="font-bold mb-2">ดัชนีมวลกาย (BMI)</h4><div class="chart-container-sm"><canvas id="chartBMI"></canvas></div></div>
+            
+            <div class="glass-card"><h4 class="font-bold mb-2">น้ำตาลในเลือด (FBS)</h4><div class="chart-container-sm"><canvas id="chartFBS"></canvas></div></div>
+            <div class="glass-card"><h4 class="font-bold mb-2">น้ำตาลสะสม (HbA1c)</h4><div class="chart-container-sm"><canvas id="chartHbA1c"></canvas></div></div>
+            <div class="glass-card"><h4 class="font-bold mb-2">การทำงานของไต (eGFR)</h4><div class="chart-container-sm"><canvas id="chartEGFR"></canvas></div></div>
+            
+            <div class="glass-card"><h4 class="font-bold mb-2">น้ำหนัก (กก.)</h4><div class="chart-container-sm"><canvas id="chartWt"></canvas></div></div>
+            <div class="glass-card"><h4 class="font-bold mb-2">ส่วนสูง (ซม.)</h4><div class="chart-container-sm"><canvas id="chartHt"></canvas></div></div>
+        </div>
+
+        <!-- Statistical Analysis Section -->
+        <h2 class="text-2xl font-bold text-brand-900 mb-4 mt-12"><i class="fa-solid fa-chart-line mr-2"></i>การวิเคราะห์ความสัมพันธ์เชิงสถิติ (Statistical Analysis)</h2>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Chi-Square Table -->
+            <div class="glass-card overflow-x-auto">
+                <h4 class="font-bold text-lg mb-4 text-brand-900">1. ความสัมพันธ์ระหว่าง เพศ กับ พฤติกรรม (Chi-Square Test)</h4>
+                <table class="w-full text-sm stat-table rounded-lg overflow-hidden">
+                    <thead>
+                        <tr>
+                            <th>พฤติกรรม</th>
+                            <th>ค่าสถิติ (Chi-Square)</th>
+                            <th>p-value</th>
+                            <th>ระดับนัยสำคัญ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="chiSquareBody">
+                        <!-- JS injects here -->
+                    </tbody>
+                </table>
+                <p class="text-xs text-gray-500 mt-2">* 95% CI ในการทดสอบสัดส่วนอ้างอิงจาก p-value < 0.05</p>
+            </div>
+
+            <!-- T-Test Table -->
+            <div class="glass-card overflow-x-auto">
+                <h4 class="font-bold text-lg mb-4 text-brand-900">2. เปรียบเทียบค่าเฉลี่ยระหว่าง เพศชายและหญิง (Independent t-test)</h4>
+                <table class="w-full text-sm stat-table rounded-lg overflow-hidden">
+                    <thead>
+                        <tr>
+                            <th>ตัวแปรทางคลินิก</th>
+                            <th>เฉลี่ย ชาย</th>
+                            <th>เฉลี่ย หญิง</th>
+                            <th>p-value</th>
+                            <th>95% CI (ผลต่าง)</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tTestBody">
+                        <!-- JS injects here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Filterable Tables Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <!-- Address Table -->
+            <div class="glass-card flex flex-col h-[400px]">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="font-bold text-lg text-brand-900"><i class="fa-solid fa-map-location-dot mr-2"></i>ที่อยู่ (ตำบล/หมู่บ้าน)</h4>
+                    <input type="text" id="filterAddress" placeholder="ค้นหาที่อยู่..." class="border rounded px-2 py-1 text-sm border-brand-300 focus:outline-none focus:ring focus:ring-brand-200" onkeyup="renderAddressTable()">
+                </div>
+                <div class="overflow-y-auto flex-grow rounded border border-gray-100">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-brand-50 sticky top-0"><tr><th class="p-2">ตำบล</th><th class="p-2">หมู่บ้าน</th><th class="p-2">จำนวนผู้ป่วย</th></tr></thead>
+                        <tbody id="addressTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Meds Table -->
+            <div class="glass-card flex flex-col h-[400px]">
+                <div class="flex justify-between items-center mb-4">
+                    <h4 class="font-bold text-lg text-brand-900"><i class="fa-solid fa-pills mr-2"></i>ยาที่ได้รับ</h4>
+                    <input type="text" id="filterMeds" placeholder="ค้นหายา..." class="border rounded px-2 py-1 text-sm border-brand-300 focus:outline-none focus:ring focus:ring-brand-200" onkeyup="renderMedsTable()">
+                </div>
+                <div class="overflow-y-auto flex-grow rounded border border-gray-100">
+                    <table class="w-full text-sm text-left">
+                        <thead class="bg-brand-50 sticky top-0"><tr><th class="p-2">รายการยา</th><th class="p-2">จำนวนคนไข้</th></tr></thead>
+                        <tbody id="medsTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Patient Data Table (Requires Login) -->
+        <div class="glass-card mb-8">
+            <div class="flex justify-between items-center mb-4">
+                <h4 class="font-bold text-xl text-brand-900"><i class="fa-solid fa-database mr-2"></i>ฐานข้อมูลผู้ป่วย</h4>
+                <button onclick="showAddModal()" class="bg-brand-600 hover:bg-brand-500 text-white px-3 py-1.5 rounded text-sm transition hidden auth-required">
+                    <i class="fa-solid fa-plus"></i> เพิ่มข้อมูล
+                </button>
+            </div>
+            
+            <div id="loginOverlay" class="bg-gray-100 rounded-lg p-8 text-center border-2 border-dashed border-gray-300 mb-4">
+                <i class="fa-solid fa-lock text-4xl text-gray-400 mb-3"></i>
+                <p class="text-gray-600">กรุณาเข้าสู่ระบบเพื่อดู แก้ไข หรือลบข้อมูลรายบุคคล (พ.ร.บ. คุ้มครองข้อมูลส่วนบุคคล)</p>
+                <button onclick="showLoginModal()" class="mt-4 bg-amber-500 px-4 py-2 rounded text-brand-900 font-bold hover:bg-amber-400">เข้าสู่ระบบ</button>
+            </div>
+
+            <div id="dataTableContainer" class="overflow-x-auto hidden auth-required">
+                <table class="w-full text-sm text-left whitespace-nowrap stat-table">
+                    <thead>
+                        <tr>
+                            <th>จัดการ</th>
+                            <th>รหัส</th><th>ชื่อ</th><th>สกุล</th><th>อายุ</th><th>เพศ</th>
+                            <th>โรคหลัก</th><th>สิทธิ์</th><th>BP</th><th>BMI</th><th>สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="patientTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- App Configuration & Security (Obfuscated) -->
+    <script>
+        // App Configuration & Security
+        // นำ URL ที่คุณแจ้งมา ฝังลงในระบบโดยตรง
+        const _cfg = {
+            g: "https://script.google.com/macros/s/AKfycbxrKUWHQxD240KRCr9FzSeeFrNS4vW71054tUk5DmIJUR5oEMwjDb1BKsU6VzVVogWI/exec",
+            u: atob("YWRtaW4="), // 'admin'
+            p: atob("MTIzNA==")  // '1234'
+        };
+        
+        let globalData = [];
+        let isLoggedIn = false;
+        let chartInstances = {};
+
+        // Color Palettes
+        const colors = {
+            green: ['#064e3b','#047857','#059669','#10b981','#34d399','#6ee7b7'],
+            pie: ['#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#8b5cf6'],
+            sex: ['#3b82f6', '#ec4899'] // Blue for male, Pink for female
+        };
+
+        // Initialize App
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchFromGoogleSheet();
+        });
+
+        // ==========================================
+        // DATA FETCHING & UPLOAD
+        // ==========================================
+        async function fetchFromGoogleSheet() {
+            Swal.fire({ title: 'กำลังดึงข้อมูล...', text: 'เชื่อมต่อ Google Sheet', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                // Since GET returns JSON usually, but CORS might block if not configured.
+                const response = await fetch(_cfg.g);
+                const data = await response.json();
+                
+                if(data && data.length > 0) {
+                    globalData = normalizeData(data);
+                    updateDashboard();
+                    Swal.fire({ icon: 'success', title: 'สำเร็จ', text: `โหลดข้อมูล ${globalData.length} รายการแล้ว`, timer: 1500, showConfirmButton: false });
+                } else {
+                    throw new Error("No data found");
+                }
+            } catch (error) {
+                console.error("Fetch Error:", error);
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'ไม่สามารถดึงจาก Cloud ได้',
+                    text: 'กรุณาอัปโหลดไฟล์ CSV หรือตรวจสอบสิทธิ์ Google Sheet ของคุณ',
+                    confirmButtonColor: '#047857'
+                });
+            }
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            Swal.fire({ title: 'กำลังประมวลผลไฟล์...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            
+            Papa.parse(file, {
+                header: true,
+                skipEmptyLines: true,
+                complete: function(results) {
+                    if (results.data && results.data.length > 0) {
+                        globalData = normalizeData(results.data);
+                        updateDashboard();
+                        Swal.fire({ icon: 'success', title: 'สำเร็จ', text: `โหลดข้อมูล ${globalData.length} รายการจากไฟล์แล้ว`, timer: 1500, showConfirmButton: false });
+                    }
+                }
+            });
+        }
+
+        // Standardize column names in case of slight variations
+        function normalizeData(data) {
+            return data.map(row => ({
+                id: row['รหัสคนไข้'] || row['ID'] || '',
+                name: row['ชื่อ'] || '',
+                surname: row['สกุล'] || '',
+                age: parseFloat(row['อายุ']) || 0,
+                sex: row['เพศ'] || 'ไม่ระบุ',
+                subdistrict: row['ตำบล'] || '',
+                village: row['หมู่บ้าน'] || '',
+                rights: row['ประเภทสิทธิ์'] || '',
+                diagnosis: row['การวินิจฉัยหลัก'] || '',
+                sbp: parseFloat(row['ความดันบน']) || 0,
+                dbp: parseFloat(row['ความดันล่าง']) || 0,
+                weight: parseFloat(row['น้ำหนัก_กก']) || 0,
+                height: parseFloat(row['ส่วนสูง_ซม']) || 0,
+                bmi: parseFloat(row['BMI']) || 0,
+                fbs: parseFloat(row['FBS']) || 0,
+                hba1c: parseFloat(row['HbA1c']) || 0,
+                egfr: parseFloat(row['eGFR']) || 0,
+                smoking: row['สูบบุหรี่'] || '',
+                alcohol: row['ดื่มแอลกอฮอล์'] || '',
+                meds: row['ยาที่ได้รับ'] || 'ไม่มี',
+                status: row['สถานะติดตาม'] || '',
+                date: row['วันที่รับบริการล่าสุด'] || ''
+            }));
+        }
+
+        // ==========================================
+        // MAIN RENDER ENGINE
+        // ==========================================
+        function updateDashboard() {
+            if(!globalData || globalData.length === 0) return;
+            
+            renderKPIs();
+            renderCharts();
+            renderTables();
+            calculateStatistics();
+            renderPatientTable();
+        }
+
+        function renderKPIs() {
+            document.getElementById('kpiTotal').innerText = globalData.length.toLocaleString();
+            let avgAge = globalData.reduce((sum, p) => sum + p.age, 0) / globalData.length;
+            document.getElementById('kpiAvgAge').innerText = avgAge.toFixed(1);
+            
+            let m = globalData.filter(p => p.sex === 'ชาย').length;
+            let f = globalData.filter(p => p.sex === 'หญิง').length;
+            document.getElementById('kpiSexRatio').innerText = `${m} : ${f}`;
+
+            let followup = globalData.filter(p => p.status.includes('ติดตาม') || p.status.includes('รักษาครบ')).length;
+            let fPct = (followup / globalData.length) * 100;
+            document.getElementById('kpiFollowUp').innerText = fPct.toFixed(1) + '%';
+        }
+
+        // ==========================================
+        // CHARTING LOGIC
+        // ==========================================
+        function renderCharts() {
+            // Helper: Binning
+            const binData = (key, bins, labels) => {
+                let counts = new Array(labels.length).fill(0);
+                globalData.forEach(p => {
+                    let val = p[key];
+                    for(let i=0; i<bins.length; i++) {
+                        if(val <= bins[i]) { counts[i]++; break; }
+                        if(i === bins.length - 1) counts[labels.length-1]++; 
+                    }
+                });
+                return counts;
+            };
+
+            // Helper: Grouping Categories
+            const groupData = (key) => {
+                let counts = {};
+                globalData.forEach(p => { let v = p[key]; counts[v] = (counts[v] || 0) + 1; });
+                return counts;
+            };
+
+            // 1. Age (Bar)
+            const ageBins = [30, 45, 60, 150];
+            const ageLabels = ['<30', '30-45', '46-60', '>60'];
+            createChart('chartAge', 'bar', ageLabels, binData('age', ageBins, ageLabels), colors.green);
+
+            // 2. Sex (Pie)
+            let sexData = groupData('sex');
+            createChart('chartSex', 'pie', Object.keys(sexData), Object.values(sexData), colors.sex);
+
+            // 3. Follow Up (Pie)
+            let statusData = groupData('status');
+            createChart('chartFollowUp', 'pie', Object.keys(statusData), Object.values(statusData), colors.pie);
+
+            // 4. Diagnosis (Horizontal Bar)
+            let diagData = groupData('diagnosis');
+            // Sort to show top 5
+            let sortedDiag = Object.entries(diagData).sort((a,b)=>b[1]-a[1]).slice(0, 6);
+            createChart('chartDiag', 'bar', sortedDiag.map(x=>x[0]), sortedDiag.map(x=>x[1]), colors.green, true);
+
+            // 5. Rights (Bar)
+            let rightData = groupData('rights');
+            createChart('chartRights', 'bar', Object.keys(rightData), Object.values(rightData), colors.green);
+
+            // Clinical Vitals (Bars)
+            createChart('chartSBP', 'bar', ['<120','120-139','140-159','>=160'], binData('sbp', [119,139,159,999], [0,0,0,0]), colors.green);
+            createChart('chartDBP', 'bar', ['<80','80-89','90-99','>=100'], binData('dbp', [79,89,99,999], [0,0,0,0]), colors.green);
+            createChart('chartBMI', 'bar', ['<18.5','18.5-22.9','23-24.9','>=25 (อ้วน)'], binData('bmi', [18.4, 22.9, 24.9, 999], [0,0,0,0]), colors.green);
+            createChart('chartFBS', 'bar', ['<100','100-125','>=126'], binData('fbs', [99, 125, 999], [0,0,0]), colors.green);
+            createChart('chartHbA1c', 'bar', ['<5.7','5.7-6.4','>=6.5'], binData('hba1c', [5.6, 6.4, 99], [0,0,0]), colors.green);
+            createChart('chartEGFR', 'bar', ['>=90(G1)','60-89(G2)','30-59(G3)','15-29(G4)','<15(G5)'], [
+                globalData.filter(p=>p.egfr>=90).length, globalData.filter(p=>p.egfr>=60&&p.egfr<90).length,
+                globalData.filter(p=>p.egfr>=30&&p.egfr<60).length, globalData.filter(p=>p.egfr>=15&&p.egfr<30).length,
+                globalData.filter(p=>p.egfr<15).length
+            ], colors.green);
+            
+            // Weight & Height
+            createChart('chartWt', 'bar', ['<50','50-65','66-80','>80'], binData('weight', [49,65,80,999], [0,0,0,0]), colors.green);
+            createChart('chartHt', 'bar', ['<150','150-160','161-170','>170'], binData('height', [149,160,170,999], [0,0,0,0]), colors.green);
+        }
+
+        function createChart(canvasId, type, labels, data, bgColors, isHorizontal=false) {
+            let ctx = document.getElementById(canvasId).getContext('2d');
+            if(chartInstances[canvasId]) chartInstances[canvasId].destroy();
+
+            let opts = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: type==='pie' } }
+            };
+
+            if (isHorizontal) opts.indexAxis = 'y';
+
+            chartInstances[canvasId] = new Chart(ctx, {
+                type: type,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'จำนวน',
+                        data: data,
+                        backgroundColor: bgColors,
+                        borderWidth: 1
+                    }]
+                },
+                options: opts
+            });
+        }
+
+        // ==========================================
+        // STATISTICAL ENGINE (jStat)
+        // ==========================================
+        function calculateStatistics() {
+            try {
+                // 1. Chi-Square: Sex vs Smoking & Alcohol
+                let chiHtml = '';
+                chiHtml += doChiSquare('สูบบุหรี่', 'smoking');
+                chiHtml += doChiSquare('ดื่มแอลกอฮอล์', 'alcohol');
+                document.getElementById('chiSquareBody').innerHTML = chiHtml;
+
+                // 2. T-Test: Sex vs HbA1c, FBS, eGFR, BMI
+                let tHtml = '';
+                tHtml += doTTest('HbA1c', 'hba1c');
+                tHtml += doTTest('FBS', 'fbs');
+                tHtml += doTTest('eGFR', 'egfr');
+                tHtml += doTTest('BMI', 'bmi');
+                document.getElementById('tTestBody').innerHTML = tHtml;
+            } catch (e) {
+                console.error("Stats Error:", e);
+                document.getElementById('chiSquareBody').innerHTML = '<tr><td colspan="4" class="text-center text-red-500">ไม่สามารถคำนวณสถิติได้เนื่องจากข้อมูลไม่สมบูรณ์</td></tr>';
+            }
+        }
+
+        function doChiSquare(label, key) {
+            let males = globalData.filter(p => p.sex === 'ชาย');
+            let females = globalData.filter(p => p.sex === 'หญิง');
+            
+            // Collect unique categories for the key
+            let cats = [...new Set(globalData.map(p => p[key]).filter(x=>x))];
+            
+            // Build observed matrix [ [m_cat1, m_cat2], [f_cat1, f_cat2] ]
+            let observed = [
+                cats.map(c => males.filter(p => p[key] === c).length),
+                cats.map(c => females.filter(p => p[key] === c).length)
+            ];
+
+            // Basic Chi-Square calculation
+            let rowTotals = observed.map(row => row.reduce((a,b)=>a+b,0));
+            let colTotals = cats.map((_, i) => observed[0][i] + observed[1][i]);
+            let grandTotal = rowTotals.reduce((a,b)=>a+b,0);
+
+            let chiSq = 0;
+            for(let r=0; r<2; r++){
+                for(let c=0; c<cats.length; c++){
+                    let exp = (rowTotals[r] * colTotals[c]) / grandTotal;
+                    if(exp > 0) chiSq += Math.pow(observed[r][c] - exp, 2) / exp;
+                }
+            }
+
+            let df = (2-1) * (cats.length-1);
+            // using jStat to find p-value
+            let pVal = 1 - jStat.chisquare.cdf(chiSq, df);
+            let sig = pVal < 0.05 ? '<span class="text-red-600 font-bold">มีนัยสำคัญ</span>' : 'ไม่มีนัยสำคัญ';
+
+            return `<tr><td>${label}</td><td>${chiSq.toFixed(3)}</td><td>${pVal.toFixed(4)}</td><td>${sig}</td></tr>`;
+        }
+
+        function doTTest(label, key) {
+            let mData = globalData.filter(p => p.sex === 'ชาย').map(p => parseFloat(p[key])).filter(v => !isNaN(v));
+            let fData = globalData.filter(p => p.sex === 'หญิง').map(p => parseFloat(p[key])).filter(v => !isNaN(v));
+
+            if(mData.length < 2 || fData.length < 2) return '';
+
+            let meanM = jStat.mean(mData);
+            let meanF = jStat.mean(fData);
+            let varM = jStat.variance(mData, true);
+            let varF = jStat.variance(fData, true);
+            let nM = mData.length;
+            let nF = fData.length;
+
+            // Welch's t-test
+            let se = Math.sqrt((varM/nM) + (varF/nF));
+            let t = (meanM - meanF) / se;
+            let df = Math.pow((varM/nM + varF/nF), 2) / ( Math.pow(varM/nM, 2)/(nM-1) + Math.pow(varF/nF, 2)/(nF-1) );
+            
+            let pVal = jStat.studentt.cdf(-Math.abs(t), df) * 2;
+            
+            // 95% CI of difference
+            let tCrit = jStat.studentt.inv(0.975, df);
+            let diff = meanM - meanF;
+            let ciLow = diff - (tCrit * se);
+            let ciHigh = diff + (tCrit * se);
+
+            return `<tr>
+                <td>${label}</td>
+                <td>${meanM.toFixed(2)}</td>
+                <td>${meanF.toFixed(2)}</td>
+                <td class="${pVal < 0.05 ? 'text-red-600 font-bold' : ''}">${pVal.toFixed(4)}</td>
+                <td>${ciLow.toFixed(2)} ถึง ${ciHigh.toFixed(2)}</td>
+            </tr>`;
+        }
+
+        // ==========================================
+        // FILTERABLE TABLES
+        // ==========================================
+        function renderTables() {
+            renderAddressTable();
+            renderMedsTable();
+        }
+
+        function renderAddressTable() {
+            let filter = document.getElementById('filterAddress').value.toLowerCase();
+            let addrMap = {};
+            globalData.forEach(p => {
+                let addr = `${p.subdistrict} / ${p.village}`;
+                if(addr.toLowerCase().includes(filter)) {
+                    addrMap[addr] = (addrMap[addr] || 0) + 1;
+                }
+            });
+
+            let html = Object.entries(addrMap).sort((a,b)=>b[1]-a[1]).map(x => {
+                let parts = x[0].split(' / ');
+                return `<tr><td>${parts[0]}</td><td>${parts[1]}</td><td>${x[1]}</td></tr>`;
+            }).join('');
+            document.getElementById('addressTableBody').innerHTML = html;
+        }
+
+        function renderMedsTable() {
+            let filter = document.getElementById('filterMeds').value.toLowerCase();
+            let medsMap = {};
+            globalData.forEach(p => {
+                if(!p.meds) return;
+                // Assume meds might be comma separated
+                let mList = p.meds.split(',').map(m=>m.trim());
+                mList.forEach(m => {
+                    if(m.toLowerCase().includes(filter)) medsMap[m] = (medsMap[m] || 0) + 1;
+                });
+            });
+
+            let html = Object.entries(medsMap).sort((a,b)=>b[1]-a[1]).map(x => {
+                return `<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`;
+            }).join('');
+            document.getElementById('medsTableBody').innerHTML = html;
+        }
+
+        // ==========================================
+        // AUTHENTICATION & PATIENT TABLE
+        // ==========================================
+        function showLoginModal() {
+            Swal.fire({
+                title: 'เข้าสู่ระบบ (เจ้าหน้าที่)',
+                html: `
+                    <input type="text" id="swal-user" class="swal2-input" placeholder="Username">
+                    <input type="password" id="swal-pass" class="swal2-input" placeholder="Password">
+                `,
+                confirmButtonText: 'เข้าสู่ระบบ',
+                confirmButtonColor: '#047857',
+                focusConfirm: false,
+                preConfirm: () => {
+                    const u = document.getElementById('swal-user').value;
+                    const p = document.getElementById('swal-pass').value;
+                    if (u === _cfg.u && p === _cfg.p) {
+                        return true;
+                    }
+                    Swal.showValidationMessage(`ข้อมูลผู้ใช้ไม่ถูกต้อง`);
+                }
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    isLoggedIn = true;
+                    document.getElementById('loginOverlay').classList.add('hidden');
+                    document.querySelectorAll('.auth-required').forEach(el => el.classList.remove('hidden'));
+                    document.getElementById('loginBtn').innerHTML = `<i class="fa-solid fa-user-check"></i> เจ้าหน้าที่`;
+                    document.getElementById('loginBtn').classList.replace('bg-amber-500', 'bg-brand-500');
+                    document.getElementById('loginBtn').classList.replace('text-brand-950', 'text-white');
+                    renderPatientTable();
+                    Swal.fire({ icon: 'success', title: 'เข้าสู่ระบบสำเร็จ', timer: 1000, showConfirmButton: false});
+                }
+            });
+        }
+
+        function renderPatientTable() {
+            if(!isLoggedIn) return;
+            let html = globalData.map((p, index) => `
+                <tr>
+                    <td>
+                        <button onclick="editPatient(${index})" class="text-blue-500 hover:text-blue-700 mr-2" title="แก้ไข"><i class="fa-solid fa-pen-to-square"></i></button>
+                        <button onclick="deletePatient(${index})" class="text-red-500 hover:text-red-700" title="ลบ"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                    <td class="font-mono">${p.id}</td>
+                    <td>${p.name}</td>
+                    <td>${p.surname}</td>
+                    <td>${p.age}</td>
+                    <td>${p.sex}</td>
+                    <td>${p.diagnosis}</td>
+                    <td>${p.rights}</td>
+                    <td>${p.sbp}/${p.dbp}</td>
+                    <td>${p.bmi}</td>
+                    <td><span class="px-2 py-1 rounded text-xs ${p.status==='รักษาครบ'?'bg-green-100 text-green-800':'bg-yellow-100 text-yellow-800'}">${p.status}</span></td>
+                </tr>
+            `).join('');
+            document.getElementById('patientTableBody').innerHTML = html;
+        }
+
+        // ==========================================
+        // CRUD OPERATIONS (Google Sheet Sync)
+        // ==========================================
+        function showAddModal() {
+            showPatientFormModal({}, 'add', -1);
+        }
+
+        function editPatient(index) {
+            showPatientFormModal(globalData[index], 'edit', index);
+        }
+
+        function showPatientFormModal(data, action, index) {
+            Swal.fire({
+                title: action === 'add' ? 'เพิ่มข้อมูลผู้ป่วย' : 'แก้ไขข้อมูล',
+                html: `
+                    <div class="grid grid-cols-2 gap-2 text-left text-sm">
+                        <input id="f_id" class="swal2-input m-1 h-10" placeholder="รหัส" value="${data.id||''}" ${action==='edit'?'readonly':''}>
+                        <input id="f_name" class="swal2-input m-1 h-10" placeholder="ชื่อ" value="${data.name||''}">
+                        <input id="f_sur" class="swal2-input m-1 h-10" placeholder="สกุล" value="${data.surname||''}">
+                        <input id="f_age" type="number" class="swal2-input m-1 h-10" placeholder="อายุ" value="${data.age||''}">
+                        <select id="f_sex" class="swal2-input m-1 h-10"><option ${data.sex==='ชาย'?'selected':''}>ชาย</option><option ${data.sex==='หญิง'?'selected':''}>หญิง</option></select>
+                        <input id="f_diag" class="swal2-input m-1 h-10" placeholder="โรคหลัก" value="${data.diagnosis||''}">
+                    </div>
+                `,
+                showCancelButton: true,
+                confirmButtonText: 'บันทึก',
+                cancelButtonText: 'ยกเลิก',
+                confirmButtonColor: '#047857',
+                preConfirm: () => {
+                    return {
+                        id: document.getElementById('f_id').value,
+                        name: document.getElementById('f_name').value,
+                        surname: document.getElementById('f_sur').value,
+                        age: parseFloat(document.getElementById('f_age').value),
+                        sex: document.getElementById('f_sex').value,
+                        diagnosis: document.getElementById('f_diag').value,
+                        // Defaults for required chart fields to prevent breaks
+                        sbp: data.sbp || 120, dbp: data.dbp || 80, bmi: data.bmi || 22, rights: data.rights || 'ปกติ', status: data.status || 'ติดตาม'
+                    }
+                }
+            }).then((result) => {
+                if(result.isConfirmed) {
+                    let newData = {...data, ...result.value};
+                    if(action === 'add') globalData.unshift(newData);
+                    else globalData[index] = newData;
+                    
+                    updateDashboard();
+                    syncWithGoogleSheet({ action: action, data: newData });
+                }
+            });
+        }
+
+        function deletePatient(index) {
+            Swal.fire({
+                title: 'ยืนยันการลบ?',
+                text: `คุณต้องการลบผู้ป่วย ${globalData[index].id} ใช่หรือไม่?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'ใช่, ลบเลย'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    let deletedId = globalData[index].id;
+                    globalData.splice(index, 1);
+                    updateDashboard();
+                    syncWithGoogleSheet({ action: 'delete', id: deletedId });
+                }
+            });
+        }
+
+        // Post to Google Apps Script
+        function syncWithGoogleSheet(payload) {
+            // Provide visual feedback
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
+            
+            // Standard fetch call for GAS doPost. 
+            // Note: GAS must handle standard POST or CORS. If CORS fails, local state is still updated.
+            fetch(_cfg.g, {
+                method: 'POST',
+                // using text/plain prevents CORS preflight issues on some GAS setups
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(payload)
+            }).then(res => res.json())
+              .then(data => {
+                  if(data.status === 'success') {
+                      Toast.fire({ icon: 'success', title: 'ซิงค์ข้อมูลไปยัง Cloud แล้ว' });
+                  }
+              }).catch(err => {
+                  console.warn("GAS Sync warning (Normal if CORS restricted):", err);
+                  Toast.fire({ icon: 'info', title: 'อัปเดตข้อมูลในระบบแล้ว (Offline Mode)' });
+              });
+        }
+
+    </script>
+</body>
+</html>
